@@ -1,0 +1,50 @@
+services:
+  minio:
+    image: minio/minio
+    container_name: minio
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_DOMAIN=minio
+    networks:
+      iceberg_net:
+        aliases:
+          - minio
+    ports:
+      - 9001:9001
+      - 9000:9000
+    volumes:
+      - ${MINIO_LOCAL_S3_STORAGE}:/data
+    command: ["server", "/data", "--console-address", ":9001"]
+
+  nessie:
+    image: ghcr.io/projectnessie/nessie
+    container_name: nessie
+    environment:
+      - NESSIE_VERSION_STORE_TYPE=ROCKSDB
+      - NESSIE_VERSION_STORE_PERSIST_ROCKS_DATABASE_PATH=/data
+    ports:
+      - 19120:19120
+    volumes:
+      - ${NESSIE_LOCAL_CATALOG_PATH}:/data
+    networks:
+      iceberg_net:
+        aliases:
+          - nessie
+
+  trino:
+    image: trinodb/trino
+    container_name: trino
+    environment:
+      - CATALOG_MANAGEMENT=dynamic
+    ports:
+      - 8080:8080
+    networks:
+      iceberg_net:
+        aliases:
+          - trino
+
+networks:
+  iceberg_net:
+    driver: bridge
+
