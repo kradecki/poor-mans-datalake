@@ -81,14 +81,17 @@ CREATE TABLE datalake.warehouse.customers (
 )
 WITH (format = 'AVRO');
 ```
-Then let's insert a sample row and query the table to check it was successfully written:
+Then let's insert a sample row...
 
 ```sql
 INSERT INTO 
   datalake.warehouse.customers 
 VALUES 
-  ('Krzysztof', 'Radecki', 'PL', 'Gdańsk', 'krzysztof.radecki@gmail.com');
+  ('Krzysztof', 'Radecki', 'PL', 'Gdańsk', 'k.radecki@example.com');
+```
+... and query the table to check it was successfully written:
 
+```sql
 SELECT * 
 FROM
   datalake.warehouse.customers; 
