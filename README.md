@@ -1,4 +1,4 @@
-# Building a Poor man's Datalake.
+# Building a Poor man's Datalake (🦩 + 🦕 + 🐰 + 🧊 = 🚀).
 Let's build our own Snowflake-like Data Lake using Minio, Nessie, Trino and Apache Iceberg.
 
 ## 1. Clone this repository and configure environmental variables/
