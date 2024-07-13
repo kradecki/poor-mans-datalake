@@ -1,22 +1,29 @@
 services:
+
+  #
+  # MINIO - A high-performance, AWS S3 compliant object storage
+  #
   minio:
     image: minio/minio
     container_name: minio
+    command: ["server", "/data", "--console-address", ":9001"]
     environment:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
       - MINIO_DOMAIN=minio
-    networks:
-      iceberg_net:
-        aliases:
-          - minio
     ports:
       - 9001:9001
       - 9000:9000
     volumes:
       - ${MINIO_LOCAL_S3_STORAGE}:/data
-    command: ["server", "/data", "--console-address", ":9001"]
+    networks:
+      iceberg_net:
+        aliases:
+          - minio
 
+  #
+  # NESSIE - A metadata catalog service
+  #
   nessie:
     image: ghcr.io/projectnessie/nessie
     container_name: nessie
@@ -32,6 +39,9 @@ services:
         aliases:
           - nessie
 
+  #
+  # TRINO - A distributed SQL query engine
+  #
   trino:
     image: trinodb/trino
     container_name: trino
@@ -39,6 +49,9 @@ services:
       - CATALOG_MANAGEMENT=dynamic
     ports:
       - 8080:8080
+      - 8123:8123 # Access to Clickhouse on the host
+    volumes:
+      - ${TRINO_LOCAL_CATALOG_PATH}:/etc/trino/catalog
     networks:
       iceberg_net:
         aliases:
