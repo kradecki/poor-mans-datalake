@@ -1,0 +1,104 @@
+services:
+
+  #
+  # MINIO - A high-performance, AWS S3 compliant object storage
+  #
+  minio:
+    image: minio/minio
+    container_name: minio-mc
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_DOMAIN=minio
+    ports:
+      - 9001:9001
+      - 9000:9000
+    volumes:
+      - ${MINIO_LOCAL_S3_STORAGE}:/data
+    networks:
+      iceberg_net:
+        aliases:
+          - minio
+
+  #
+  # NESSIE - A metadata catalog service
+  #
+  nessie:
+    image: ghcr.io/projectnessie/nessie
+    container_name: nessie-mc
+    environment:
+      - NESSIE_VERSION_STORE_TYPE=ROCKSDB
+      - NESSIE_VERSION_STORE_PERSIST_ROCKS_DATABASE_PATH=/data
+    ports:
+      - 19120:19120
+    volumes:
+      - ${NESSIE_LOCAL_CATALOG_PATH}:/data
+    networks:
+      iceberg_net:
+        aliases:
+          - nessie
+
+  #
+  # TRINO COORDINATOR - A distributed SQL query engine
+  #
+  trino-coordinator:
+    image: trinodb/trino
+    container_name: trino-coordinator
+    environment:
+      - CATALOG_MANAGEMENT=dynamic
+    ports:
+      - 8080:8080
+      - 8123:8123 # Access to Clickhouse on the host
+    volumes:
+      - ${TRINO_COORDINATOR_CONFIG_PATH}:/etc/trino
+    networks:
+      iceberg_net:
+        aliases:
+          - trino-coordinator
+
+
+  #
+  # TRINO WORKER 01 - A distributed SQL query engine
+  #
+  trino-worker01:
+    image: trinodb/trino
+    container_name: trino-worker01
+    environment:
+      - CATALOG_MANAGEMENT=dynamic
+    ports:
+      - 8081:8081
+    volumes:
+      - ${TRINO_WORKER01_CONFIG_PATH}:/etc/trino
+    depends_on:
+      trino-coordinator:
+        condition: service_started
+    networks:
+      iceberg_net:
+        aliases:
+          - trino-worker01
+
+  #
+  # TRINO WORKER 02 - A distributed SQL query engine
+  #
+  trino-worker02:
+    image: trinodb/trino
+    container_name: trino-worker02
+    environment:
+      - CATALOG_MANAGEMENT=dynamic
+    ports:
+      - 8082:8082
+    volumes:
+      - ${TRINO_WORKER02_CONFIG_PATH}:/etc/trino
+    depends_on:
+      trino-coordinator:
+        condition: service_started
+    networks:
+      iceberg_net:
+        aliases:
+          - trino-worker02
+
+networks:
+  iceberg_net:
+    driver: bridge
+
