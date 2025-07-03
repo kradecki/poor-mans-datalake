@@ -32,7 +32,44 @@ Examine the provided `docker-compose.yml` to make sure you're fine with the sett
 docker compose up -d
 ```
 
-## 3. Launch Trino CLI
+## 3. Connect to Nessie and create branches
+
+Before using a catalog that references Nessie, make sure the Nessie CLI is connected to the correct API endpoint, and that relevant branches exist for each catalog you plan to use.
+
+### Connect to Nessie
+
+Open the Nessie CLI Tool
+
+```sh
+java -jar nessie-cli-0.104.2.jar
+```
+In the Nessie CLI Tool Type:
+
+```sql
+CONNECT TO http://127.0.0.1:19120/api/v2;
+```
+You should see output like:
+
+```
+Connecting to http://127.0.0.1:19120/api/v2 ...
+No Iceberg REST endpoint at http://127.0.0.1:19120/iceberg/ ...
+Successfully connected to Nessie REST at http://127.0.0.1:19120/api/v2 - Nessie API version 2, spec version 2.2.0
+```
+
+Create branches for catalogs
+These branches must match the values you plan to use as iceberg.nessie-catalog.ref in your Trino catalog definitions:
+
+```sql
+CREATE BRANCH minio;
+CREATE BRANCH cloudflare;
+```
+You should see confirmations like:
+
+```Created BRANCH minio at <commit-hash>
+Created BRANCH cloudflare at <commit-hash>
+```
+
+## 4. Launch Trino CLI
 
 Refer to the official documentation on how to obtain and launch the most up to date Trino CLI (Command Line Interface).
 
@@ -40,20 +77,20 @@ Refer to the official documentation on how to obtain and launch the most up to d
 ./trino http://localhost:8080
 ```
 
-## 4. Create a Catalog
+## 5. Create a Catalog
 
 Think of a Catalog as a Metadata Store. In our particular scenario it will hold relevant data about Apache Iceberg metadata files and manifest files.
 
 The SQL script beloe configure connection to both: the Metadata layer (Nessie) and the Storage Layer (Minio).
 
 ```sql
-CREATE  CATALOG datalake USING iceberg
+CREATE  CATALOG minio USING iceberg
   WITH (
     "iceberg.catalog.type" = 'nessie',
     "iceberg.nessie-catalog.uri" = 'http://nessie:19120/api/v2',
-    "iceberg.nessie-catalog.ref" = 'main',
+    "iceberg.nessie-catalog.ref" = 'minio',
     "iceberg.file-format" = 'PARQUET',
-    "iceberg.nessie-catalog.default-warehouse-dir" = 's3a://datalake/',
+    "iceberg.nessie-catalog.default-warehouse-dir" = 's3a://lakehouse/',
     "fs.native-s3.enabled" = 'true',
     "s3.endpoint" = 'http://minio:9000',
     "s3.region" = 'us-east-1',
@@ -69,18 +106,18 @@ sh-5.1$ pwd
 /etc/trino/catalog
 
 sh-5.1$ ls -la
-total 32
-drwxr-xr-x 1 trino trino 4096 Jul  9 18:30 .
-drwxr-xr-x 1 trino trino 4096 Jun 28 00:32 ..
--rw-r--r-- 1 trino trino  417 Jul  9 18:30 datalake.properties
+total 8
+drwxr-xr-x 3 trino trino   96 Jul  3 06:16 .
+drwxr-xr-x 3 trino trino 4096 Jun  6 05:06 ..
+-rw-r--r-- 1 trino trino  414 Jul  3 06:16 minio.properties
 
-sh-5.1$ cat datalake.properties 
-#Tue Jul 09 18:30:21 GMT 2024
+sh-5.1$ cat minio.properties 
+#Thu Jul 03 06:16:06 GMT 2025
 connector.name=iceberg
 fs.native-s3.enabled=true
 iceberg.catalog.type=nessie
 iceberg.file-format=PARQUET
-iceberg.nessie-catalog.default-warehouse-dir=s3a\://datalake/
+iceberg.nessie-catalog.default-warehouse-dir=s3a\://dlh01/
 iceberg.nessie-catalog.ref=main
 iceberg.nessie-catalog.uri=http\://nessie\:19120/api/v2
 s3.aws-access-key=admin
@@ -89,24 +126,48 @@ s3.endpoint=http\://minio\:9000
 s3.path-style-access=true
 s3.region=us-east-1
 ```
+
+You can also configure a remote S3 compatible storage
+
+#### Example 1: Cloudflare R2
+```sql
+CREATE  CATALOG cloudflare USING iceberg
+  WITH (
+    "iceberg.catalog.type" = 'nessie',
+    "iceberg.nessie-catalog.uri" = 'http://nessie:19120/api/v2',
+    "iceberg.nessie-catalog.ref" = 'cloudflare',
+    "iceberg.file-format" = 'PARQUET',
+    "iceberg.nessie-catalog.default-warehouse-dir" = 's3a://data-lakehouse/',
+    "fs.native-s3.enabled" = 'true',
+    "s3.endpoint" = 'https://e943f2e0afa2008d77848028e0337783.r2.cloudflarestorage.com/data-lakehouse',
+    "s3.region" = 'us-east-1',
+    "s3.path-style-access" = 'true',
+    "s3.aws-access-key" = 'cc41ec523588fe3e7d0646b2c1f068aa',
+    "s3.aws-secret-key" = '075514fe8ee1435851ce144a44b8021bce8ed3bb928da497b73eb7bed1d6214e'
+  );
+```
+
+
 Sources:
 - https://trino.io/docs/current/object-storage/metastores.html#nessie-catalog
 - https://trino.io/docs/current/installation/containers.html#configuring-trino
 
-## 5. Create a Schema
+## 6. Create a Schema and use it
 
 ```sql
-CREATE SCHEMA datalake.warehouse;
+CREATE SCHEMA minio.dlh01;
+
+USE minio.dlh01;
 ```
 
-## 6. Create a Table
+## 7. Create a Table
 
 The table below uses `PARQUET` format, which is just like `ORC` suitable for OLAP-heavy workloads (analytics). For OLTP-like traffic (insert-heavy, no analytics), you can opt for `AVRO`.
 
 It was designed to work with the official NYC TLC Trip Record Data that you can obtain [here](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page).
 
 ```sql
-CREATE TABLE datalake.warehouse.nyc_taxi (
+CREATE TABLE nyc_taxi (
     vendor_id INTEGER COMMENT 'ID of the vendor',
     tpep_pickup_datetime TIMESTAMP COMMENT 'Pick-up date and time',
     tpep_dropoff_datetime TIMESTAMP COMMENT 'Drop-off date and time',
@@ -134,7 +195,7 @@ Then let's insert a sample row...
 
 ```sql
 INSERT INTO 
-  datalake.warehouse.yellow_tripdata 
+  nyc_taxi
 VALUES
  (
     1,
@@ -161,12 +222,10 @@ VALUES
 ... and query the table to check it was successfully written:
 
 ```sql
-SELECT * 
-FROM
-  datalake.warehouse.yellow_tripdata; 
+SELECT * FROM nyc_taxi;
 ```
 
-## 7. Clean Up
+## 8. Clean Up
 
 This step is optional but should you need to cleanup your data lake, here's your one-stop-shop:
 
